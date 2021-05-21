@@ -3,13 +3,16 @@ import os.path
 import pytest
 
 from matryoshka_tester.helpers import GitRepositoryBuild
-from conftest import is_my_container_smaller
 
 
-GOLANG_MAX_CONTAINER_SIZE_ON_DISK=1181116006 # 1.1GB uncompressed
+GOLANG_MAX_CONTAINER_SIZE_ON_DISK = 1181116006  # 1.1GB uncompressed
+
 
 def test_go_size(host, container, container_runtime):
-    assert is_my_container_smaller(host, container_runtime, container.image, GOLANG_MAX_CONTAINER_SIZE_ON_DISK)
+    assert (
+        container_runtime.get_image_size(container.image)
+        < GOLANG_MAX_CONTAINER_SIZE_ON_DISK
+    )
 
 
 def test_go_version(container):

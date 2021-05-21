@@ -14,7 +14,6 @@ from matryoshka_tester.parse_data import containers
 from matryoshka_tester.helpers import (
     get_selected_runtime,
     GitRepositoryBuild,
-    OciRuntimeBase
 )
 
 ContainerData = namedtuple("Container", ["version", "image", "connection"])
@@ -71,19 +70,6 @@ def restrict_to_version(versions):
         return wrapper
 
     return inner
-
-
-def is_my_container_smaller(host, container_runtime: OciRuntimeBase, image: str, size_threshold: Union[float, int]):
-    image_size = host.run_expect(
-        [0],
-        (
-            f"{container_runtime.runner_binary} "
-            "inspect -f '{{ .Size }}' "
-            f" {image}"
-        )
-    )
-    print(image_size)
-    return float(image_size.stdout) < float(size_threshold)
 
 
 ## COMMON GIT STUFF
