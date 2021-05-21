@@ -74,36 +74,16 @@ def restrict_to_version(versions):
 
 
 def is_my_container_smaller(host, container_runtime: OciRuntimeBase, image: str, size_threshold: Union[float, int]):
-    run_command = (
-        f"{container_runtime.runner_binary} images "
-        f"--filter reference={image} "
-        "--format '{{ .Repository }}:{{ .Tag }} {{ .Size }}'"
-    )
-    print(run_command)
-
-    image_size_lines = list(
-        filter(
-            None,
-            host.run_expect(
-                [0],
-                run_command,
-            ).stdout.split("\n"),
+    image_size = host.run_expect(
+        [0],
+        (
+            f"{container_runtime.runner_binary} "
+            "inspect -f '{{ .Size }}' "
+            f" {image}"
         )
     )
-    print(image_size_lines)
-
-    if len(image_size_lines) != 1:
-        raise ValueError
-
-    image_url, size_and_unit = image_size_lines[0].split(" ")
-    unit = size_and_unit[-2:]
-    size = size_and_unit[:-2]
-    
-    if unit not in ["MB", "GB"]:
-        return ValueError
-    multiplier = 2 ** 20 if unit == "MB" else 2 ** 30
-
-    return float(size) * multiplier < size_threshold
+    print(image_size)
+    return float(image_size.stdout) < float(size_threshold)
 
 
 ## COMMON GIT STUFF
