@@ -6,6 +6,7 @@ import functools
 import tempfile
 
 from collections import namedtuple
+from typing import Union
 
 from requests import get
 
@@ -13,9 +14,99 @@ from matryoshka_tester.parse_data import containers
 from matryoshka_tester.helpers import (
     get_selected_runtime,
     GitRepositoryBuild,
+    OciRuntimeBase
 )
 
 ContainerData = namedtuple("Container", ["version", "image", "connection"])
+
+
+def pytest_generate_tests(metafunc):
+    # Finds container_type.
+    # If necessary, you can override the detection by setting a variable "container_type" in your module.
+    container_type = getattr(metafunc.module, "container_type", "")
+    if container_type == "":
+        container_type = (
+            os.path.basename(metafunc.module.__file__)
+            .strip()
+            .replace("test_", "")
+            .replace(".py", "")
+        )
+
+    if "container" in metafunc.fixturenames:
+        metafunc.parametrize(
+            "container",
+            [
+                (container.version, container.url)
+                for container in containers
+                if container.type == container_type
+            ],
+            ids=[
+                container.version
+                for container in containers
+                if container.type == container_type
+            ],
+            indirect=True,
+        )
+
+
+# GENERIC FIXTURE/HELPERS
+
+
+def restrict_to_version(versions):
+    def inner(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                c = kwargs.get("container")
+            except KeyError:
+                print("Unexpected structure, did you use container fixture?")
+            else:
+                if c.version in versions:
+                    return func(*args, **kwargs)
+                else:
+                    return pytest.skip(
+                        "Version restrict used and current version doesn't match"
+                    )
+
+        return wrapper
+
+    return inner
+
+
+def is_my_container_smaller(host, container_runtime: OciRuntimeBase, image: str, size_threshold: Union[float, int]):
+    run_command = (
+        f"{container_runtime.runner_binary} images "
+        f"--filter reference={image} "
+        "--format '{{ .Repository }}:{{ .Tag }} {{ .Size }}'"
+    )
+    print(run_command)
+
+    image_size_lines = list(
+        filter(
+            None,
+            host.run_expect(
+                [0],
+                run_command,
+            ).stdout.split("\n"),
+        )
+    )
+    print(image_size_lines)
+
+    if len(image_size_lines) != 1:
+        raise ValueError
+
+    image_url, size_and_unit = image_size_lines[0].split(" ")
+    unit = size_and_unit[-2:]
+    size = size_and_unit[:-2]
+    
+    if unit not in ["MB", "GB"]:
+        return ValueError
+    multiplier = 2 ** 20 if unit == "MB" else 2 ** 30
+
+    return float(size) * multiplier < size_threshold
+
+
+## COMMON GIT STUFF
 
 
 @pytest.fixture(scope="function")
@@ -50,6 +141,9 @@ def host_git_clone(request, host, tmp_path):
         yield tmp_path, request.param
     finally:
         os.chdir(cwd)
+
+
+# COMMON run cmds support
 
 
 @pytest.fixture(scope="module")
@@ -122,53 +216,3 @@ def dapper(host):
             with open(dest, "wb") as dapper_file:
                 dapper_file.write(resp.content)
             yield dest
-
-
-def pytest_generate_tests(metafunc):
-    # Finds container_type.
-    # If necessary, you can override the detection by setting a variable "container_type" in your module.
-    container_type = getattr(metafunc.module, "container_type", "")
-    if container_type == "":
-        container_type = (
-            os.path.basename(metafunc.module.__file__)
-            .strip()
-            .replace("test_", "")
-            .replace(".py", "")
-        )
-
-    if "container" in metafunc.fixturenames:
-        metafunc.parametrize(
-            "container",
-            [
-                (container.version, container.url)
-                for container in containers
-                if container.type == container_type
-            ],
-            ids=[
-                container.version
-                for container in containers
-                if container.type == container_type
-            ],
-            indirect=True,
-        )
-
-
-def restrict_to_version(versions):
-    def inner(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                c = kwargs.get("container")
-            except KeyError:
-                print("Unexpected structure, did you use container fixture?")
-            else:
-                if c.version in versions:
-                    return func(*args, **kwargs)
-                else:
-                    return pytest.skip(
-                        "Version restrict used and current version doesn't match"
-                    )
-
-        return wrapper
-
-    return inner

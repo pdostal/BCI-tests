@@ -43,6 +43,7 @@ class OciRuntimeBase(ABC, ToParamMixin):
     def get_image_id_from_stdout(self, stdout: str) -> str:
         pass
 
+
     def __str__(self) -> str:
         return self.__class__.__name__
 
